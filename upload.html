@@ -1,0 +1,60 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>上传文件 · BCSIMP 论坛</title>
+<link rel="stylesheet" href="/css/style.css">
+</head>
+<body>
+<div class="container">
+  <div class="section-title">上传文件</div>
+  <div class="card">
+    <div class="form-group">
+      <label>选择文件（≤ 25MB）</label>
+      <input type="file" id="file">
+    </div>
+    <button class="btn" id="submit">上传</button>
+    <div id="result" style="margin-top:20px"></div>
+  </div>
+</div>
+<script src="/js/api.js"></script>
+<script>
+async function init() {
+  await buildNav();
+  if (!getToken()) location.href = '/login.html';
+}
+
+document.getElementById('submit').onclick = async () => {
+  const f = document.getElementById('file').files[0];
+  if (!f) { toast('先选个文件', true); return; }
+  if (f.size > 25 * 1024 * 1024) { toast('文件超过 25MB', true); return; }
+
+  const formData = new FormData();
+  formData.append('file', f);
+
+  toast('上传中...');
+  const r = await fetch(API_BASE + '/api/upload', {
+    method: 'POST',
+    headers: { 'Authorization': 'Bearer ' + getToken(), 'X-Client': 'web' },
+    body: formData
+  });
+  const data = await r.json();
+
+  if (data.ok) {
+    const fullUrl = API_BASE + data.url;
+    document.getElementById('result').innerHTML =
+      '<div style="color:#00ffc8;margin-bottom:10px">✅ 上传成功（存储: ' + data.storage + '）</div>' +
+      '<div style="background:#000;padding:10px;border-radius:6px;word-break:break-all;margin-bottom:10px">' + escapeHtml(fullUrl) + '</div>' +
+      (f.type.startsWith('image/') ? '<img src="' + fullUrl + '" style="max-width:100%;border-radius:6px">' : '') +
+      '<div style="margin-top:10px"><button class="btn secondary" onclick="navigator.clipboard.writeText(\'' + fullUrl + '\')">复制链接</button></div>';
+    toast('上传成功');
+  } else {
+    toast(data.error || '上传失败', true);
+  }
+};
+
+init();
+</script>
+</body>
+</html>

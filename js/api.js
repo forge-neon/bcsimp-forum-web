@@ -47,7 +47,7 @@ async function buildNav() {
   const logged = me.ok && me.user;
   nav.innerHTML = '<a href="/index.html" class="logo">BCSIMP 论坛</a><div class="links">' +
     '<a href="/index.html">首页</a>' +
-    (logged ? '<a href="/new.html">发帖</a>' : '') +
+    (logged ? '<a href="/new.html">发帖</a><a href="/upload.html">上传</a>' : '') +
     (isAdmin ? '<a href="/admin.html">管理</a>' : '') +
     (logged ? '<span style="color:#00ffc8">' + escapeHtml(me.user.username) + '</span><a href="#" id="__logout">登出</a>' : '<a href="/login.html">登录</a>') +
     '</div>';
