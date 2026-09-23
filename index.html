@@ -1,0 +1,37 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>BCSIMP 论坛</title>
+<link rel="stylesheet" href="/css/style.css">
+</head>
+<body>
+<div class="container">
+  <div class="section-title">最新帖子</div>
+  <div id="list"><div class="empty">加载中...</div></div>
+  <div class="btn-row" style="justify-content:center">
+    <button class="btn secondary" id="prev">上一页</button>
+    <button class="btn secondary" id="next">下一页</button>
+  </div>
+</div>
+<script src="/js/api.js"></script>
+<script>
+let page = 1;
+async function load() {
+  const list = document.getElementById('list');
+  list.innerHTML = '<div class="empty">加载中...</div>';
+  const r = await API.posts(page);
+  if (!r.ok || !r.posts || r.posts.length === 0) {
+    list.innerHTML = '<div class="empty">暂无帖子<br><small style="color:#444">点右上角"发帖"开始</small></div>';
+    return;
+  }
+  list.innerHTML = r.posts.map(p => '<a href="/post.html?id=' + p.id + '" class="card post-item"><div class="title">' + escapeHtml(p.title) + '</div><div class="meta">' + escapeHtml(p.username || '匿名') + ' · ' + formatTime(p.created_at) + '</div></a>').join('');
+}
+document.getElementById('prev').onclick = () => { if (page > 1) { page--; load(); } };
+document.getElementById('next').onclick = () => { page++; load(); };
+buildNav();
+load();
+</script>
+</body>
+</html>

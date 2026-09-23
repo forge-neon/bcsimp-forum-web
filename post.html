@@ -1,0 +1,54 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>帖子 · BCSIMP 论坛</title>
+<link rel="stylesheet" href="/css/style.css">
+</head>
+<body>
+<div class="container">
+  <div id="postBox"><div class="empty">加载中...</div></div>
+  <div class="section-title" style="margin-top:40px">回复</div>
+  <div id="replies"></div>
+  <div class="card" id="replyForm" style="display:none">
+    <div class="form-group"><textarea id="replyContent" placeholder="写回复..." style="min-height:100px"></textarea></div>
+    <button class="btn" id="submitReply">发表回复</button>
+  </div>
+</div>
+<script src="/js/api.js"></script>
+<script>
+const pid = parseInt(new URLSearchParams(location.search).get('id') || '0');
+async function loadPost() {
+  const box = document.getElementById('postBox');
+  const r = await API.post(pid);
+  if (!r.ok) { box.innerHTML = '<div class="empty">帖子不存在或未审核</div>'; return; }
+  const p = r.post;
+  box.innerHTML = '<div class="section-title">' + escapeHtml(p.title) + '</div><div class="card"><div style="font-size:12px;color:#666;margin-bottom:16px">' + escapeHtml(p.username || '匿名') + ' · ' + formatTime(p.created_at) + '</div><div style="line-height:1.8;white-space:pre-wrap">' + escapeHtml(p.content) + '</div></div>';
+}
+async function loadReplies() {
+  const box = document.getElementById('replies');
+  const r = await API.replies(pid);
+  if (!r.ok || !r.replies || r.replies.length === 0) { box.innerHTML = '<div class="empty" style="padding:30px">还没有回复</div>'; return; }
+  box.innerHTML = r.replies.map(x => '<div class="reply"><div class="head">' + escapeHtml(x.username || '匿名') + ' · ' + formatTime(x.created_at) + '</div><div class="body">' + escapeHtml(x.content) + '</div></div>').join('');
+}
+async function init() {
+  await buildNav();
+  if (getToken()) {
+    const me = await API.me();
+    if (me.ok) document.getElementById('replyForm').style.display = 'block';
+  }
+  loadPost();
+  loadReplies();
+}
+document.getElementById('submitReply').onclick = async () => {
+  const c = document.getElementById('replyContent').value.trim();
+  if (!c) { toast('写点什么', true); return; }
+  const r = await API.createReply(pid, c);
+  if (r.ok) { toast(r.message || '已提交'); document.getElementById('replyContent').value = ''; }
+  else { toast(r.error || '失败', true); }
+};
+init();
+</script>
+</body>
+</html>

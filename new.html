@@ -1,0 +1,32 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>发帖 · BCSIMP 论坛</title>
+<link rel="stylesheet" href="/css/style.css">
+</head>
+<body>
+<div class="container">
+  <div class="section-title">发新帖</div>
+  <div class="card">
+    <div class="form-group"><label>标题</label><input id="title" maxlength="100"></div>
+    <div class="form-group"><label>内容</label><textarea id="content" maxlength="10000"></textarea></div>
+    <button class="btn" id="submit">发表（需审核）</button>
+  </div>
+</div>
+<script src="/js/api.js"></script>
+<script>
+async function init() { await buildNav(); if (!getToken()) location.href = '/login.html'; }
+document.getElementById('submit').onclick = async () => {
+  const t = document.getElementById('title').value.trim();
+  const c = document.getElementById('content').value.trim();
+  if (!t || !c) { toast('标题和内容都填', true); return; }
+  const r = await API.createPost(t, c);
+  if (r.ok) { toast(r.message || '已提交'); setTimeout(() => location.href = '/index.html', 800); }
+  else { toast(r.error || '失败', true); }
+};
+init();
+</script>
+</body>
+</html>

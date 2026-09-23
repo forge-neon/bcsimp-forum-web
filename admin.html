@@ -1,0 +1,55 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>管理 · BCSIMP 论坛</title>
+<link rel="stylesheet" href="/css/style.css">
+</head>
+<body>
+<div class="container">
+  <div class="section-title">管理面板</div>
+  <div class="card"><h3 style="margin-bottom:16px;color:#00ffc8">待审核用户</h3><div id="pendingUsers"></div></div>
+  <div class="card"><h3 style="margin-bottom:16px;color:#00ffc8">待审核帖子</h3><div id="pendingPosts"></div></div>
+  <div class="card"><h3 style="margin-bottom:16px;color:#00ffc8">待审核回复</h3><div id="pendingReplies"></div></div>
+  <div class="card"><h3 style="margin-bottom:16px;color:#00ffc8">所有用户</h3><div id="allUsers"></div></div>
+</div>
+<script src="/js/api.js"></script>
+<script>
+async function load() {
+  const r = await API.pending();
+  if (!r.ok) { toast(r.error || '无权限', true); setTimeout(() => location.href = '/index.html', 800); return; }
+  renderList('pendingUsers', r.users, 'user', u => '<b>' + escapeHtml(u.username) + '</b> <span style="color:#666">' + formatTime(u.created_at) + '</span>');
+  renderList('pendingPosts', r.posts, 'post', p => '<b>' + escapeHtml(p.title) + '</b> <span style="color:#666">uid=' + p.uid + ' · ' + formatTime(p.created_at) + '</span>');
+  renderList('pendingReplies', r.replies, 'reply', x => escapeHtml(x.content) + ' <span style="color:#666">pid=' + x.post_id + ' · uid=' + x.uid + '</span>');
+}
+function renderList(id, arr, type, fmt) {
+  const box = document.getElementById(id);
+  if (!arr || arr.length === 0) { box.innerHTML = '<div style="color:#555;font-size:14px">无</div>'; return; }
+  box.innerHTML = arr.map(item => '<div style="padding:10px 0;border-bottom:1px solid rgba(255,255,255,0.05);display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap"><div style="flex:1;min-width:200px">' + fmt(item) + '</div><div><button class="btn" style="padding:6px 14px;font-size:12px" onclick="doApprove(\'' + type + '\', ' + item.id + ', \'approve\')">通过</button> <button class="btn danger" style="padding:6px 14px;font-size:12px" onclick="doApprove(\'' + type + '\', ' + item.id + ', \'reject\')">拒绝</button></div></div>').join('');
+}
+async function doApprove(type, id, action) {
+  const r = await API.approve(type, id, action);
+  if (r.ok) { toast('已处理'); load(); } else { toast(r.error || '失败', true); }
+}
+async function loadUsers() {
+  const r = await API.adminUsers();
+  if (!r.ok) return;
+  const box = document.getElementById('allUsers');
+  box.innerHTML = r.users.map(u => '<div style="padding:10px 0;border-bottom:1px solid rgba(255,255,255,0.05);display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap"><div style="flex:1;min-width:200px"><b>' + escapeHtml(u.username) + '</b> <span class="tag' + (u.status === 'banned' ? ' banned' : (u.status === 'pending' ? ' pending' : '')) + '" style="margin-left:8px">' + u.role + ' / ' + u.status + '</span></div>' + (u.status !== 'banned' ? '<button class="btn danger" style="padding:6px 14px;font-size:12px" onclick="doBan(' + u.id + ')">封禁</button>' : '') + '</div>').join('');
+}
+async function doBan(id) {
+  const reason = prompt('封禁原因：') || '';
+  const r = await API.ban(id, reason);
+  if (r.ok) { toast('已封禁'); loadUsers(); } else { toast(r.error || '失败', true); }
+}
+async function init() {
+  await buildNav();
+  if (!getToken()) { location.href = '/login.html'; return; }
+  load();
+  loadUsers();
+}
+init();
+</script>
+</body>
+</html>
