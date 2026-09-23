@@ -10,14 +10,65 @@
 <div class="container">
   <div class="section-title">发新帖</div>
   <div class="card">
-    <div class="form-group"><label>标题</label><input id="title" maxlength="100"></div>
-    <div class="form-group"><label>内容</label><textarea id="content" maxlength="10000"></textarea></div>
-    <button class="btn" id="submit">发表（需审核）</button>
+    <div class="form-group">
+      <label>标题</label>
+      <input id="title" maxlength="100">
+    </div>
+    <div class="form-group">
+      <label>内容</label>
+      <textarea id="content" maxlength="10000"></textarea>
+    </div>
+    <div class="form-group">
+      <label>上传图片 / 文件（≤ 25MB）</label>
+      <input type="file" id="file">
+      <div id="uploadStatus" style="font-size:13px;color:#888;margin-top:6px"></div>
+    </div>
+    <button class="btn secondary" id="uploadBtn">上传到内容</button>
+    <button class="btn" id="submit" style="margin-left:10px">发表（需审核）</button>
   </div>
 </div>
 <script src="/js/api.js"></script>
 <script>
-async function init() { await buildNav(); if (!getToken()) location.href = '/login.html'; }
+async function init() {
+  await buildNav();
+  if (!getToken()) location.href = '/login.html';
+}
+
+document.getElementById('uploadBtn').onclick = async () => {
+  const f = document.getElementById('file').files[0];
+  if (!f) { toast('先选个文件', true); return; }
+  if (f.size > 25 * 1024 * 1024) { toast('文件超过 25MB', true); return; }
+
+  const status = document.getElementById('uploadStatus');
+  status.textContent = '上传中...';
+
+  const formData = new FormData();
+  formData.append('file', f);
+
+  const r = await fetch(API_BASE + '/api/upload', {
+    method: 'POST',
+    headers: { 'Authorization': 'Bearer ' + getToken(), 'X-Client': 'web' },
+    body: formData
+  });
+  const data = await r.json();
+
+  if (data.ok) {
+    const fullUrl = API_BASE + data.url;
+    const ta = document.getElementById('content');
+    if (f.type.startsWith('image/')) {
+      ta.value += '\n![图片](' + fullUrl + ')\n';
+    } else {
+      ta.value += '\n[文件](' + fullUrl + ')\n';
+    }
+    status.innerHTML = '✅ 已插入：<a href="' + fullUrl + '" target="_blank">' + escapeHtml(f.name) + '</a>';
+    toast('上传成功');
+    document.getElementById('file').value = '';
+  } else {
+    status.textContent = '❌ ' + (data.error || '上传失败');
+    toast(data.error || '上传失败', true);
+  }
+};
+
 document.getElementById('submit').onclick = async () => {
   const t = document.getElementById('title').value.trim();
   const c = document.getElementById('content').value.trim();
@@ -26,6 +77,7 @@ document.getElementById('submit').onclick = async () => {
   if (r.ok) { toast(r.message || '已提交'); setTimeout(() => location.href = '/index.html', 800); }
   else { toast(r.error || '失败', true); }
 };
+
 init();
 </script>
 </body>

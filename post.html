@@ -19,19 +19,48 @@
 <script src="/js/api.js"></script>
 <script>
 const pid = parseInt(new URLSearchParams(location.search).get('id') || '0');
+
+// 简单渲染：识别 ![alt](url) 和 [text](url)
+function renderContent(text) {
+  let html = escapeHtml(text);
+  // 图片
+  html = html.replace(/!\[([^\]]*)\]\(([^)]+)\)/g,
+    '<img src="$2" style="max-width:100%;border-radius:6px;margin:10px 0;display:block">');
+  // 链接
+  html = html.replace(/\[([^\]]+)\]\(([^)]+)\)/g,
+    '<a href="$2" target="_blank">$1</a>');
+  return html;
+}
+
 async function loadPost() {
   const box = document.getElementById('postBox');
   const r = await API.post(pid);
   if (!r.ok) { box.innerHTML = '<div class="empty">帖子不存在或未审核</div>'; return; }
   const p = r.post;
-  box.innerHTML = '<div class="section-title">' + escapeHtml(p.title) + '</div><div class="card"><div style="font-size:12px;color:#666;margin-bottom:16px">' + escapeHtml(p.username || '匿名') + ' · ' + formatTime(p.created_at) + '</div><div style="line-height:1.8;white-space:pre-wrap">' + escapeHtml(p.content) + '</div></div>';
+  box.innerHTML =
+    '<div class="section-title">' + escapeHtml(p.title) + '</div>' +
+    '<div class="card">' +
+      '<div style="font-size:12px;color:#666;margin-bottom:16px">' +
+        escapeHtml(p.username || '匿名') + ' · ' + formatTime(p.created_at) +
+      '</div>' +
+      '<div style="line-height:1.8;white-space:pre-wrap">' + renderContent(p.content) + '</div>' +
+    '</div>';
 }
+
 async function loadReplies() {
   const box = document.getElementById('replies');
   const r = await API.replies(pid);
-  if (!r.ok || !r.replies || r.replies.length === 0) { box.innerHTML = '<div class="empty" style="padding:30px">还没有回复</div>'; return; }
-  box.innerHTML = r.replies.map(x => '<div class="reply"><div class="head">' + escapeHtml(x.username || '匿名') + ' · ' + formatTime(x.created_at) + '</div><div class="body">' + escapeHtml(x.content) + '</div></div>').join('');
+  if (!r.ok || !r.replies || r.replies.length === 0) {
+    box.innerHTML = '<div class="empty" style="padding:30px">还没有回复</div>';
+    return;
+  }
+  box.innerHTML = r.replies.map(x =>
+    '<div class="reply"><div class="head">' +
+      escapeHtml(x.username || '匿名') + ' · ' + formatTime(x.created_at) +
+    '</div><div class="body">' + renderContent(x.content) + '</div></div>'
+  ).join('');
 }
+
 async function init() {
   await buildNav();
   if (getToken()) {
@@ -41,6 +70,7 @@ async function init() {
   loadPost();
   loadReplies();
 }
+
 document.getElementById('submitReply').onclick = async () => {
   const c = document.getElementById('replyContent').value.trim();
   if (!c) { toast('写点什么', true); return; }
@@ -48,6 +78,7 @@ document.getElementById('submitReply').onclick = async () => {
   if (r.ok) { toast(r.message || '已提交'); document.getElementById('replyContent').value = ''; }
   else { toast(r.error || '失败', true); }
 };
+
 init();
 </script>
 </body>
