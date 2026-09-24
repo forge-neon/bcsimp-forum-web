@@ -11,10 +11,17 @@
   <div class="section-title">上传文件</div>
   <div class="card">
     <div class="form-group">
-      <label>选择文件（≤ 25MB）</label>
+      <label>选择文件（≤ 500MB）</label>
       <input type="file" id="file">
+      <div id="uploadStatus" style="font-size:13px;color:#888;margin-top:6px"></div>
+      <div id="progressWrap" style="display:none;margin-top:10px">
+        <div style="background:#333;height:6px;border-radius:3px;overflow:hidden">
+          <div id="progressBar" style="background:#00ffc8;height:100%;width:0%;transition:width 0.2s"></div>
+        </div>
+        <div id="progressText" style="font-size:12px;color:#666;margin-top:6px"></div>
+      </div>
     </div>
-    <button class="btn" id="submit">上传</button>
+    <button class="btn" id="uploadBtn">上传</button>
     <div id="result" style="margin-top:20px"></div>
   </div>
 </div>
@@ -25,34 +32,94 @@ async function init() {
   if (!getToken()) location.href = '/login.html';
 }
 
-document.getElementById('submit').onclick = async () => {
+document.getElementById('uploadBtn').onclick = async () => {
   const f = document.getElementById('file').files[0];
   if (!f) { toast('先选个文件', true); return; }
-  if (f.size > 25 * 1024 * 1024) { toast('文件超过 25MB', true); return; }
+  if (f.size > 500 * 1024 * 1024) { toast('文件超过 500MB', true); return; }
 
-  const formData = new FormData();
-  formData.append('file', f);
+  const status = document.getElementById('uploadStatus');
+  const wrap = document.getElementById('progressWrap');
+  const bar = document.getElementById('progressBar');
+  const txt = document.getElementById('progressText');
 
-  toast('上传中...');
-  const r = await fetch(API_BASE + '/api/upload', {
+  status.textContent = '准备中...';
+  wrap.style.display = 'block';
+  bar.style.width = '0%';
+  txt.textContent = '0%';
+
+  // 1. 请求预签名 URL
+  const r = await fetch(API_BASE + '/api/upload-url', {
     method: 'POST',
-    headers: { 'Authorization': 'Bearer ' + getToken(), 'X-Client': 'web' },
-    body: formData
+    headers: {
+      'Authorization': 'Bearer ' + getToken(),
+      'X-Client': 'web',
+      'Content-Type': 'application/json'
+    },
+    body: JSON.stringify({ name: f.name, size: f.size, type: f.type })
   });
   const data = await r.json();
-
-  if (data.ok) {
-    const fullUrl = API_BASE + data.url;
-    document.getElementById('result').innerHTML =
-      '<div style="color:#00ffc8;margin-bottom:10px">✅ 上传成功（存储: ' + data.storage + '）</div>' +
-      '<div style="background:#000;padding:10px;border-radius:6px;word-break:break-all;margin-bottom:10px">' + escapeHtml(fullUrl) + '</div>' +
-      (f.type.startsWith('image/') ? '<img src="' + fullUrl + '" style="max-width:100%;border-radius:6px">' : '') +
-      '<div style="margin-top:10px"><button class="btn secondary" onclick="navigator.clipboard.writeText(\'' + fullUrl + '\')">复制链接</button></div>';
-    toast('上传成功');
-  } else {
-    toast(data.error || '上传失败', true);
+  if (!data.ok) {
+    status.textContent = '❌ ' + (data.error || '获取上传地址失败');
+    toast(data.error || '失败', true);
+    return;
   }
+
+  status.textContent = '上传中...';
+
+  // 2. 直传 B2
+  await new Promise((resolve, reject) => {
+    const xhr = new XMLHttpRequest();
+    xhr.open('PUT', data.uploadUrl, true);
+    xhr.setRequestHeader('Content-Type', f.type || 'application/octet-stream');
+
+    xhr.upload.onprogress = (e) => {
+      if (e.lengthComputable) {
+        const pct = Math.round(e.loaded / e.total * 100);
+        bar.style.width = pct + '%';
+        txt.textContent = pct + '% (' + (e.loaded/1024/1024).toFixed(1) + 'MB / ' + (e.total/1024/1024).toFixed(1) + 'MB)';
+      }
+    };
+    xhr.onload = () => {
+      if (xhr.status >= 200 && xhr.status < 300) resolve();
+      else reject(new Error('B2 返回 ' + xhr.status + ': ' + xhr.responseText.slice(0, 120)));
+    };
+    xhr.onerror = () => reject(new Error('网络错误或 CORS 被拦'));
+    xhr.send(f);
+  }).then(async () => {
+    // 3. 通知 Worker 完成
+    const r2 = await fetch(API_BASE + '/api/upload-done', {
+      method: 'POST',
+      headers: {
+        'Authorization': 'Bearer ' + getToken(),
+        'X-Client': 'web',
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({ id: data.id })
+    });
+    const d2 = await r2.json();
+    if (!d2.ok) throw new Error(d2.error || '通知失败');
+
+    const fullUrl = API_BASE + d2.url;
+    status.textContent = '✅ 上传成功';
+    document.getElementById('result').innerHTML =
+      '<div style="background:#000;padding:10px;border-radius:6px;word-break:break-all;margin-bottom:10px">' + escapeHtml(fullUrl) + '</div>' +
+      (f.type.startsWith('image/') ? '<img src="' + fullUrl + '" style="max-width:100%;border-radius:6px;margin-bottom:10px">' : '') +
+      '<div style="display:flex;gap:10px;flex-wrap:wrap">' +
+        '<a class="btn" href="' + fullUrl + '" target="_blank">打开</a>' +
+        '<button class="btn secondary" onclick="copy(\'' + fullUrl + '\')">复制链接</button>' +
+      '</div>';
+    toast('上传成功');
+    document.getElementById('file').value = '';
+    setTimeout(() => { wrap.style.display = 'none'; }, 1500);
+  }).catch(err => {
+    status.textContent = '❌ ' + err.message;
+    toast(err.message, true);
+  });
 };
+
+function copy(u) {
+  navigator.clipboard.writeText(u).then(() => toast('已复制'));
+}
 
 init();
 </script>
