@@ -14,9 +14,9 @@
   <div class="card" id="replyForm" style="display:none">
     <div class="form-group"><textarea id="replyContent" placeholder="写回复..." style="min-height:100px"></textarea></div>
     <div class="form-group">
-      <label>附件（可选，≤ 500MB）</label>
+      <label>附件（每个 ≤ 100MB）</label>
       <input type="file" id="replyFile" multiple>
-      <button class="btn secondary" id="replyUploadBtn" style="margin-top:8px">上传附件</button>
+      <button class="btn secondary" id="replyUploadBtn" style="margin-top:8px">上传选中的文件</button>
       <div id="replyUploadStatus" style="font-size:13px;color:#888;margin-top:8px"></div>
       <div id="replyAttachmentList" style="margin-top:12px"></div>
     </div>
@@ -33,7 +33,7 @@ function renderContent(text) {
   html = html.replace(/!\[([^\]]*)\]\(([^)]+)\)/g,
     '<img src="$2" style="max-width:100%;border-radius:6px;margin:10px 0;display:block">');
   html = html.replace(/\[文件\]\(([^)]+)\)/g,
-    '<a href="$1" target="_blank" style="display:inline-block;padding:12px 24px;background:linear-gradient(90deg,#00ffc8,#00b3ff);color:#000;font-weight:bold;border-radius:8px;text-decoration:none;margin:10px 0">⬇ 点击下载</a>');
+    '<a href="$1" target="_blank" style="display:inline-block;padding:10px 20px;background:linear-gradient(90deg,#00ffc8,#00b3ff);color:#000;font-weight:bold;border-radius:8px;text-decoration:none;margin:10px 0">⬇ 点击下载</a>');
   html = html.replace(/\[([^\]]+)\]\(([^)]+)\)/g,
     '<a href="$2" target="_blank" style="color:#00ffc8">$1</a>');
   return html;
@@ -96,35 +96,21 @@ document.getElementById('replyUploadBtn').onclick = async () => {
 
   for (let i = 0; i < files.length; i++) {
     const f = files[i];
-    if (f.size > 500 * 1024 * 1024) { toast(f.name + ' 超过 500MB，跳过', true); continue; }
+    if (f.size > 100 * 1024 * 1024) { toast(f.name + ' 超过 100MB，跳过', true); continue; }
     status.textContent = '上传中 (' + (i+1) + '/' + files.length + ')：' + f.name;
     try {
-      const r = await fetch(API_BASE + '/api/upload-url', {
+      const fd = new FormData();
+      fd.append('file', f);
+      fd.append('filename', f.name);
+      fd.append('filetype', f.type || 'application/octet-stream');
+      const r = await fetch(API_BASE + '/api/upload', {
         method: 'POST',
-        headers: { 'Authorization': 'Bearer ' + getToken(), 'X-Client': 'web', 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name: f.name, size: f.size, type: f.type })
+        headers: { 'Authorization': 'Bearer ' + getToken(), 'X-Client': 'web' },
+        body: fd
       });
       const data = await r.json();
       if (!data.ok) throw new Error(data.error || '失败');
-
-      await new Promise((resolve, reject) => {
-        const xhr = new XMLHttpRequest();
-        xhr.open('PUT', data.uploadUrl, true);
-        xhr.setRequestHeader('Content-Type', f.type || 'application/octet-stream');
-        xhr.onload = () => (xhr.status >= 200 && xhr.status < 300) ? resolve() : reject(new Error('B2 ' + xhr.status));
-        xhr.onerror = () => reject(new Error('网络错误或 CORS'));
-        xhr.send(f);
-      });
-
-      const r2 = await fetch(API_BASE + '/api/upload-done', {
-        method: 'POST',
-        headers: { 'Authorization': 'Bearer ' + getToken(), 'X-Client': 'web', 'Content-Type': 'application/json' },
-        body: JSON.stringify({ id: data.id })
-      });
-      const d2 = await r2.json();
-      if (!d2.ok) throw new Error(d2.error || '通知失败');
-
-      replyAttachments.push({ id: data.id, name: f.name, size: f.size });
+      replyAttachments.push({ id: data.id, name: data.name, size: data.size, type: data.type, url: API_BASE + data.url });
     } catch (err) {
       toast(f.name + ' 失败：' + err.message, true);
     }
@@ -139,7 +125,7 @@ function renderReplyAttachments() {
   box.innerHTML = '<div style="font-size:13px;color:#aaa;margin-bottom:8px">已上传：</div>' +
     replyAttachments.map((a, i) =>
       '<div style="display:flex;align-items:center;gap:10px;padding:6px 0">' +
-        '<span style="flex:1;font-size:13px">📎 ' + escapeHtml(a.name) + '</span>' +
+        '<span style="flex:1;font-size:13px">📎 ' + escapeHtml(a.name) + ' (' + (a.size/1024).toFixed(1) + ' KB)</span>' +
         '<button class="btn danger" style="padding:4px 10px;font-size:12px" onclick="removeReplyAtt(' + i + ')">移除</button>' +
       '</div>'
     ).join('');
